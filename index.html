@@ -88,7 +88,412 @@
     <p class="hint">マイクの きょかを おしてね　<span class="badge">声が大きいほど 早くかんせい！</span></p>
   </div>
 </div>
+
 <script>
+(function(){
+  "use strict";
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+
+  // ---------- offscreen scene canvas ----------
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const octx = off.getContext('2d');
+
+  // ---------- helpers ----------
+  function lin(y0,c0,c1){return c0;}
+  function sky(g, top, bot){
+    const grd = octx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0, top); grd.addColorStop(1, bot);
+    octx.fillStyle = grd; octx.fillRect(0,0,W,H);
+  }
+  function circle(x,y,r,color){octx.fillStyle=color;octx.beginPath();octx.arc(x,y,r,0,7);octx.fill();}
+  function rnd(a,b){return a+Math.random()*(b-a);}
+
+  // ---------- 10 Japanese scenes (gentle colorful illustrations) ----------
+  const scenes = [
+    {key:'fuji', name:'富士山', emo:'🗻', draw(){
+      sky('#bfe6ff','#ffe3c7');
+      // sun
+      circle(720,110,46,'#fff2b0');
+      // far hills
+      octx.fillStyle='#9fd6a6'; octx.beginPath();
+      octx.moveTo(0,430); octx.quadraticCurveTo(250,360,520,420);
+      octx.quadraticCurveTo(750,470,900,410); octx.lineTo(900,560); octx.lineTo(0,560); octx.fill();
+      // mountain
+      octx.fillStyle='#6f8fd0'; octx.beginPath();
+      octx.moveTo(180,430); octx.lineTo(450,150); octx.lineTo(720,430); octx.closePath(); octx.fill();
+      // snow cap
+      octx.fillStyle='#ffffff'; octx.beginPath();
+      octx.moveTo(360,270); octx.lineTo(450,150); octx.lineTo(545,275);
+      octx.quadraticCurveTo(500,250,470,290); octx.quadraticCurveTo(440,255,410,295);
+      octx.quadraticCurveTo(385,262,360,270); octx.fill();
+      // ground
+      octx.fillStyle='#7cc17c'; octx.fillRect(0,430,W,130);
+      // cherry foreground
+      drawSakuraBranch(120,470,1.1); drawSakuraBranch(770,485,0.9);
+    }},
+    {key:'sakura', name:'桜', emo:'🌸', draw(){
+      sky('#eaf6ff','#ffeef4');
+      octx.fillStyle='#a8e0a0'; octx.fillRect(0,440,W,120);
+      // trunk
+      octx.strokeStyle='#8a5a3b'; octx.lineWidth=26; octx.lineCap='round';
+      octx.beginPath(); octx.moveTo(450,540); octx.lineTo(450,300); octx.stroke();
+      octx.lineWidth=14;
+      [[-1,340,250,180],[1,330,650,190],[-1,290,320,120],[1,300,600,120]].forEach(b=>{
+        octx.beginPath(); octx.moveTo(450,b[1]); octx.quadraticCurveTo((450+b[2])/2,b[1]-40,b[2],b[3]); octx.stroke();
+      });
+      // blossom clouds
+      const spots=[[250,180],[450,150],[650,190],[330,250],[600,250],[450,240],[180,240],[720,250]];
+      spots.forEach(s=>{ for(let i=0;i<26;i++){ circle(s[0]+rnd(-70,70), s[1]+rnd(-55,55), rnd(14,26), i%3? '#ffc0d6':'#ff9ec2'); } });
+      // petals falling
+      for(let i=0;i<40;i++) circle(rnd(0,W),rnd(300,560),rnd(3,6),'#ffb3cf');
+    }},
+    {key:'taki', name:'滝', emo:'💧', draw(){
+      sky('#cdeaff','#eafaf0');
+      // cliffs
+      octx.fillStyle='#5aa35a';
+      octx.beginPath();octx.moveTo(0,0);octx.lineTo(330,0);octx.quadraticCurveTo(300,300,360,560);octx.lineTo(0,560);octx.fill();
+      octx.beginPath();octx.moveTo(900,0);octx.lineTo(560,0);octx.quadraticCurveTo(600,300,540,560);octx.lineTo(900,560);octx.fill();
+      octx.fillStyle='#4a8f4a';
+      octx.beginPath();octx.moveTo(0,0);octx.lineTo(250,0);octx.quadraticCurveTo(230,260,300,560);octx.lineTo(0,560);octx.fill();
+      // waterfall
+      const grd=octx.createLinearGradient(0,0,0,470); grd.addColorStop(0,'#ffffff');grd.addColorStop(1,'#cfeeff');
+      octx.fillStyle=grd; octx.fillRect(360,0,180,470);
+      octx.strokeStyle='rgba(255,255,255,.8)';octx.lineWidth=3;
+      for(let x=375;x<540;x+=16){octx.beginPath();octx.moveTo(x,10);octx.lineTo(x,460);octx.stroke();}
+      // pool + foam
+      octx.fillStyle='#8fd6ef'; octx.fillRect(0,470,W,90);
+      for(let i=0;i<60;i++) circle(rnd(340,560),rnd(470,510),rnd(4,10),'#ffffff');
+      // rocks
+      circle(300,500,34,'#7d7d7d');circle(600,505,40,'#8a8a8a');
+    }},
+    {key:'momiji', name:'紅葉', emo:'🍁', draw(){
+      sky('#ffe9c9','#fff6df');
+      octx.fillStyle='#caa15a'; octx.fillRect(0,450,W,110);
+      // trunk
+      octx.strokeStyle='#7a4a2b';octx.lineWidth=22;octx.lineCap='round';
+      octx.beginPath();octx.moveTo(470,540);octx.lineTo(470,320);octx.stroke();
+      octx.lineWidth=12;
+      [[250,190],[690,200],[350,150],[600,150]].forEach(b=>{octx.beginPath();octx.moveTo(470,330);octx.quadraticCurveTo((470+b[0])/2,300,b[0],b[1]);octx.stroke();});
+      const cols=['#ff7a3c','#ff4d4d','#ffb03a','#e63946','#ff9248'];
+      const spots=[[300,190],[470,150],[640,190],[380,250],[560,250],[470,220],[220,250],[720,250]];
+      spots.forEach(s=>{for(let i=0;i<24;i++)circle(s[0]+rnd(-70,70),s[1]+rnd(-55,55),rnd(13,24),cols[i%cols.length]);});
+      for(let i=0;i<36;i++)circle(rnd(0,W),rnd(320,560),rnd(3,6),cols[i%cols.length]);
+    }},
+    {key:'tanada', name:'棚田', emo:'🌾', draw(){
+      sky('#bfe6ff','#ffe9c0');
+      circle(160,120,44,'#fff0a8');
+      // terraced rice fields
+      const greens=['#8fd36a','#7cc45c','#a6df80','#6fb84f','#95d972'];
+      let y=250;
+      for(let i=0;i<7;i++){
+        octx.fillStyle=greens[i%greens.length];
+        octx.beginPath();
+        octx.moveTo(0,y);
+        octx.quadraticCurveTo(W/2, y-28, W, y+8);
+        octx.lineTo(W, y+52); octx.quadraticCurveTo(W/2, y+18, 0, y+46);
+        octx.closePath(); octx.fill();
+        // water shine
+        octx.strokeStyle='rgba(255,255,255,.5)';octx.lineWidth=3;
+        octx.beginPath();octx.moveTo(0,y+2);octx.quadraticCurveTo(W/2,y-26,W,y+10);octx.stroke();
+        y+=44;
+      }
+    }},
+    {key:'torii', name:'鳥居', emo:'⛩️', draw(){
+      sky('#ffd9b0','#ffeede');
+      circle(700,140,50,'#ffb36b');
+      // water
+      octx.fillStyle='#8fc8e6'; octx.fillRect(0,380,W,180);
+      for(let i=0;i<40;i++){octx.strokeStyle='rgba(255,255,255,.5)';octx.lineWidth=2;octx.beginPath();octx.moveTo(rnd(0,W),rnd(400,540));octx.lineTo(rnd(0,W)+30,rnd(400,540));octx.stroke();}
+      // torii
+      octx.fillStyle='#e23b2e';
+      octx.fillRect(300,180,26,300); octx.fillRect(574,180,26,300);
+      octx.fillRect(250,168,400,30);
+      octx.beginPath();octx.moveTo(235,150);octx.quadraticCurveTo(450,120,665,150);octx.lineTo(660,178);octx.quadraticCurveTo(450,150,240,178);octx.fill();
+      octx.fillRect(360,235,180,24);
+    }},
+    {key:'amanogawa', name:'天の川', emo:'🌌', draw(){
+      const grd=octx.createLinearGradient(0,0,0,H);
+      grd.addColorStop(0,'#0b1e4a');grd.addColorStop(.5,'#2a2a6e');grd.addColorStop(1,'#153a5e');
+      octx.fillStyle=grd;octx.fillRect(0,0,W,H);
+      // milky band
+      octx.save();octx.translate(450,220);octx.rotate(-0.5);
+      const mg=octx.createLinearGradient(0,-70,0,70);mg.addColorStop(0,'rgba(180,200,255,0)');mg.addColorStop(.5,'rgba(200,210,255,.35)');mg.addColorStop(1,'rgba(180,200,255,0)');
+      octx.fillStyle=mg;octx.fillRect(-700,-70,1400,140);octx.restore();
+      for(let i=0;i<260;i++){const s=rnd(.6,2.4);circle(rnd(0,W),rnd(0,430),s,i%9?'#ffffff':'#ffe9a8');}
+      // moon
+      circle(770,90,34,'#fff4c2');
+      // hill silhouette
+      octx.fillStyle='#0a1730';octx.beginPath();octx.moveTo(0,470);octx.quadraticCurveTo(450,410,900,475);octx.lineTo(900,560);octx.lineTo(0,560);octx.fill();
+    }},
+    {key:'todai', name:'海と灯台', emo:'🗼', draw(){
+      sky('#a9e0ff','#ffe6c2');
+      circle(150,120,40,'#fff2b0');
+      // sea
+      const sg=octx.createLinearGradient(0,360,0,560);sg.addColorStop(0,'#3aa0d6');sg.addColorStop(1,'#1f6fa8');
+      octx.fillStyle=sg;octx.fillRect(0,360,W,200);
+      for(let i=0;i<50;i++){octx.strokeStyle='rgba(255,255,255,.45)';octx.lineWidth=2;octx.beginPath();octx.moveTo(rnd(0,W),rnd(380,545));octx.lineTo(rnd(0,W)+26,rnd(380,545));octx.stroke();}
+      // cliff
+      octx.fillStyle='#7cc06a';octx.beginPath();octx.moveTo(560,360);octx.quadraticCurveTo(700,340,900,360);octx.lineTo(900,560);octx.lineTo(560,560);octx.fill();
+      // lighthouse
+      octx.fillStyle='#ffffff';octx.beginPath();octx.moveTo(690,360);octx.lineTo(710,190);octx.lineTo(770,190);octx.lineTo(790,360);octx.fill();
+      octx.fillStyle='#e23b2e';octx.fillRect(704,255,72,20);octx.fillRect(700,315,80,20);
+      octx.fillStyle='#ffd45e';octx.fillRect(716,170,48,30);
+      octx.fillStyle='#b0453a';octx.beginPath();octx.moveTo(710,170);octx.lineTo(740,140);octx.lineTo(770,170);octx.fill();
+    }},
+    {key:'yuki', name:'雪景色', emo:'⛄', draw(){
+      sky('#cfe0f2','#eef4fb');
+      // snow ground
+      octx.fillStyle='#ffffff';octx.beginPath();octx.moveTo(0,430);octx.quadraticCurveTo(450,390,900,430);octx.lineTo(900,560);octx.lineTo(0,560);octx.fill();
+      // houses
+      function house(x,w,col){octx.fillStyle=col;octx.fillRect(x,360,w,90);octx.fillStyle='#fff';octx.beginPath();octx.moveTo(x-12,362);octx.lineTo(x+w/2,320);octx.lineTo(x+w+12,362);octx.fill();octx.fillStyle='#ffd45e';octx.fillRect(x+w/2-12,390,24,30);}
+      house(180,120,'#c98a6a');house(360,150,'#8a9bc9');house(600,130,'#c9748a');
+      // pine trees
+      function pine(x){octx.fillStyle='#3f7a4a';for(let k=0;k<3;k++){octx.beginPath();octx.moveTo(x-30+k*3,430-k*40);octx.lineTo(x,360-k*40);octx.lineTo(x+30-k*3,430-k*40);octx.fill();}octx.fillStyle='#fff';octx.beginPath();octx.moveTo(x-8,368);octx.lineTo(x,352);octx.lineTo(x+8,368);octx.fill();}
+      pine(90);pine(790);
+      // snowflakes
+      for(let i=0;i<70;i++)circle(rnd(0,W),rnd(0,560),rnd(2,5),'#ffffff');
+    }},
+    {key:'nanohana', name:'菜の花畑', emo:'🌼', draw(){
+      sky('#bfe6ff','#e6ffd9');
+      circle(730,110,46,'#fff2b0');
+      // hills far
+      octx.fillStyle='#8fd36a';octx.beginPath();octx.moveTo(0,360);octx.quadraticCurveTo(450,300,900,360);octx.lineTo(900,400);octx.lineTo(0,400);octx.fill();
+      // yellow field
+      const fg=octx.createLinearGradient(0,380,0,560);fg.addColorStop(0,'#ffe14d');fg.addColorStop(1,'#ffd21a');
+      octx.fillStyle=fg;octx.fillRect(0,380,W,180);
+      // flower dots
+      for(let i=0;i<420;i++){const y=rnd(380,558);circle(rnd(0,W),y,rnd(2,5)*(y/560+.4),i%5?'#fff07a':'#ffb300');}
+      // green stems hint
+      octx.strokeStyle='#7cc45c';octx.lineWidth=2;
+      for(let i=0;i<60;i++){const x=rnd(0,W),y=rnd(420,558);octx.beginPath();octx.moveTo(x,y);octx.lineTo(x,y+14);octx.stroke();}
+    }},
+  ];
+
+  function drawSakuraBranch(x,y,s){
+    octx.save();octx.translate(x,y);octx.scale(s,s);
+    octx.strokeStyle='#8a5a3b';octx.lineWidth=8;octx.lineCap='round';
+    octx.beginPath();octx.moveTo(0,60);octx.quadraticCurveTo(10,0,60,-20);octx.stroke();
+    for(let i=0;i<18;i++)circle(rnd(-10,70),rnd(-40,20),rnd(6,12),i%2?'#ffc0d6':'#ff9ec2');
+    octx.restore();
+  }
+
+  // ---------- build scene buttons ----------
+  const scenesEl = document.getElementById('scenes');
+  let current = 0;
+  scenes.forEach((sc,i)=>{
+    const b=document.createElement('button');
+    b.className='scene-btn'+(i===0?' active':'');
+    b.innerHTML='<span class="emo">'+sc.emo+'</span>'+sc.name;
+    b.onclick=()=>{ if(state==='running')return; selectScene(i); };
+    sc._btn=b; scenesEl.appendChild(b);
+  });
+  function selectScene(i){
+    current=i;
+    scenes.forEach(s=>s._btn.classList.remove('active'));
+    scenes[i]._btn.classList.add('active');
+    renderScene(); resetReveal();
+  }
+  function renderScene(){ scenes[current].draw(); }
+
+  // ---------- mosaic reveal ----------
+  const TILE=18;
+  const cols=Math.ceil(W/TILE), rows=Math.ceil(H/TILE);
+  const total=cols*rows;
+  let order=[], revealedCount=0, progress=0;
+  function buildOrder(){
+    order=[...Array(total).keys()];
+    for(let i=order.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[order[i],order[j]]=[order[j],order[i]];}
+  }
+  function resetReveal(){
+    buildOrder(); revealedCount=0; progress=0;
+    ctx.clearRect(0,0,W,H);
+    // faint placeholder
+    ctx.fillStyle='#eef4fb'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(150,170,200,.25)';
+    ctx.font='bold 34px sans-serif';ctx.textAlign='center';
+    ctx.fillText('🎤 うたって えを かんせいさせよう！',W/2,H/2);
+    updateProgressText();
+  }
+  function drawTile(idx){
+    const cx=(idx%cols)*TILE, cy=((idx/cols)|0)*TILE;
+    ctx.drawImage(off, cx,cy,TILE,TILE, cx,cy,TILE,TILE);
+  }
+  function revealTo(count){
+    count=Math.min(count,total);
+    if(count<=revealedCount)return;
+    for(let i=revealedCount;i<count;i++) drawTile(order[i]);
+    revealedCount=count;
+  }
+  function updateProgressText(){
+    const pct=Math.round(progress*100);
+    if(state!=='running' && state!=='done') return;
+    if(state==='done'){progTxt.textContent='🎉 かんせい！ すごい！ 🎉';return;}
+    progTxt.textContent='かんせいまで… '+pct+'%';
+  }
+
+  // ---------- audio ----------
+  let audioCtx=null, analyser=null, micStream=null, data=null;
+  let state='idle'; // idle | running | done
+  let smoothVol=0;
+
+  async function startMic(){
+    try{
+      micStream=await navigator.mediaDevices.getUserMedia({audio:true});
+    }catch(e){
+      progTxt.textContent='マイクが つかえないよ 😢 きょかを かくにんしてね';
+      return false;
+    }
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const src=audioCtx.createMediaStreamSource(micStream);
+    analyser=audioCtx.createAnalyser(); analyser.fftSize=1024;
+    data=new Uint8Array(analyser.fftSize);
+    src.connect(analyser);
+    return true;
+  }
+  function stopMic(){
+    if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
+    if(audioCtx){audioCtx.close();audioCtx=null;}
+    analyser=null;
+  }
+  function readVolume(){
+    if(!analyser)return 0;
+    analyser.getByteTimeDomainData(data);
+    let sum=0;
+    for(let i=0;i<data.length;i++){const v=(data[i]-128)/128;sum+=v*v;}
+    return Math.sqrt(sum/data.length); // 0..~1 (usually 0..0.5)
+  }
+
+  // ---------- effects (fireworks / confetti / sparkles) ----------
+  let particles=[], confetti=[], sparkles=[], doneTime=0, fwTimer=0;
+  const CONF_COLORS=['#ff6b8a','#ffd45e','#7ec8ff','#8be08b','#c39bff','#ff9248'];
+  function spawnFirework(){
+    const x=rnd(W*0.2,W*0.8), y=rnd(H*0.15,H*0.5);
+    const col=CONF_COLORS[(Math.random()*CONF_COLORS.length)|0];
+    const n=rnd(26,40);
+    for(let i=0;i<n;i++){
+      const a=(i/n)*Math.PI*2, sp=rnd(2,6);
+      particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,col});
+    }
+  }
+  function spawnConfetti(){
+    for(let i=0;i<3;i++)
+      confetti.push({x:rnd(0,W),y:-10,vx:rnd(-1,1),vy:rnd(2,4),
+        w:rnd(6,12),h:rnd(8,16),rot:rnd(0,6),vr:rnd(-.2,.2),
+        col:CONF_COLORS[(Math.random()*CONF_COLORS.length)|0]});
+  }
+  function updateEffects(dt){
+    // fireworks
+    fwTimer-=dt; if(fwTimer<=0){spawnFirework();fwTimer=rnd(350,700);}
+    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.06;p.vx*=0.99;p.life-=0.012;});
+    particles=particles.filter(p=>p.life>0);
+    // confetti
+    spawnConfetti();
+    confetti.forEach(c=>{c.x+=c.vx+Math.sin((c.y+c.rot)*0.05);c.y+=c.vy;c.rot+=c.vr;});
+    confetti=confetti.filter(c=>c.y<H+20);
+    // sparkles
+    if(Math.random()<0.5)sparkles.push({x:rnd(0,W),y:rnd(0,H),r:rnd(2,5),life:1});
+    sparkles.forEach(s=>s.life-=0.03);
+    sparkles=sparkles.filter(s=>s.life>0);
+  }
+  function drawEffects(){
+    particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();});
+    ctx.globalAlpha=1;
+    confetti.forEach(c=>{ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.rot);ctx.fillStyle=c.col;ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);ctx.restore();});
+    sparkles.forEach(s=>{ctx.globalAlpha=Math.max(0,s.life);ctx.fillStyle='#fff';drawStar(s.x,s.y,s.r);});
+    ctx.globalAlpha=1;
+  }
+  function drawStar(x,y,r){
+    ctx.beginPath();
+    for(let i=0;i<5;i++){
+      const a=-Math.PI/2+i*2*Math.PI/5;
+      ctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r);
+      const a2=a+Math.PI/5;
+      ctx.lineTo(x+Math.cos(a2)*r*0.45,y+Math.sin(a2)*r*0.45);
+    }
+    ctx.closePath();ctx.fill();
+  }
+
+  // ---------- main loop ----------
+  const volFill=document.getElementById('volFill');
+  const volTxt=document.getElementById('volTxt');
+  const progTxt=document.getElementById('progTxt');
+  const startBtn=document.getElementById('startBtn');
+  const stopBtn=document.getElementById('stopBtn');
+  const resetBtn=document.getElementById('resetBtn');
+
+  let lastT=performance.now();
+  const RATE=0.0016; // completion speed factor per unit volume per frame
+  function loop(now){
+    const dt=now-lastT; lastT=now;
+    if(state==='running'){
+      const raw=readVolume();
+      const vol=Math.min(1, raw*2.6);       // sensitivity
+      smoothVol+=(vol-smoothVol)*0.3;
+      volFill.style.width=(smoothVol*100).toFixed(0)+'%';
+      volTxt.textContent = smoothVol>0.55?'📣':smoothVol>0.25?'🔊':smoothVol>0.08?'🔉':'🔈';
+      // advance progress only when actually singing
+      if(vol>0.06){ progress=Math.min(1, progress + vol*RATE*(dt/16.67)); }
+      revealTo(Math.floor(progress*total));
+      updateProgressText();
+      if(progress>=1){ finish(); }
+    } else if(state==='done'){
+      // redraw full picture then effects on top
+      ctx.drawImage(off,0,0);
+      updateEffects(dt);
+      drawEffects();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function finish(){
+    state='done'; doneTime=performance.now(); fwTimer=0;
+    particles=[];confetti=[];sparkles=[];
+    revealTo(total);
+    stopMic();
+    startBtn.disabled=false; stopBtn.disabled=true;
+    scenes.forEach(s=>s._btn.disabled=false);
+    volFill.style.width='0%'; volTxt.textContent='🎉';
+    updateProgressText();
+  }
+
+  startBtn.onclick=async ()=>{
+    if(state==='running')return;
+    startBtn.disabled=true;
+    progTxt.textContent='マイクを じゅんびちゅう…';
+    const ok=await startMic();
+    if(!ok){startBtn.disabled=false;return;}
+    resetReveal();
+    state='running';
+    stopBtn.disabled=false;
+    scenes.forEach(s=>s._btn.disabled=true);
+    progTxt.textContent='さあ、うたおう！ 🎵';
+  };
+  stopBtn.onclick=()=>{
+    if(state!=='running')return;
+    state='idle'; stopMic();
+    startBtn.disabled=false; stopBtn.disabled=true;
+    scenes.forEach(s=>s._btn.disabled=false);
+    volFill.style.width='0%'; volTxt.textContent='🔈';
+    progTxt.textContent='とちゅうで やめたよ。「もういちど」で リセット';
+  };
+  resetBtn.onclick=()=>{
+    if(state==='running'){stopBtn.onclick();}
+    state='idle';
+    startBtn.disabled=false; stopBtn.disabled=true;
+    scenes.forEach(s=>s._btn.disabled=false);
+    volFill.style.width='0%'; volTxt.textContent='🔈';
+    renderScene(); resetReveal();
+    progTxt.textContent='えらんで「スタート」をおしてね';
+  };
+
+  // init
+  renderScene();
+  resetReveal();
+  requestAnimationFrame(loop);
+})();
 </script>
 </body>
 </html>
