@@ -101,6 +101,11 @@
   off.width = W; off.height = H;
   const octx = off.getContext('2d');
 
+  // revealed buffer (what is shown on screen, so live effects don't smear)
+  const rev = document.createElement('canvas');
+  rev.width = W; rev.height = H;
+  const rctx = rev.getContext('2d');
+
   // ---------- helpers ----------
   function lin(y0,c0,c1){return c0;}
   function sky(g, top, bot){
@@ -309,17 +314,18 @@
   }
   function resetReveal(){
     buildOrder(); revealedCount=0; progress=0;
-    ctx.clearRect(0,0,W,H);
-    // faint placeholder
-    ctx.fillStyle='#eef4fb'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='rgba(150,170,200,.25)';
-    ctx.font='bold 34px sans-serif';ctx.textAlign='center';
-    ctx.fillText('🎤 うたって えを かんせいさせよう！',W/2,H/2);
+    // faint placeholder drawn onto the reveal buffer
+    rctx.clearRect(0,0,W,H);
+    rctx.fillStyle='#eef4fb'; rctx.fillRect(0,0,W,H);
+    rctx.fillStyle='rgba(150,170,200,.35)';
+    rctx.font='bold 34px sans-serif';rctx.textAlign='center';
+    rctx.fillText('🎤 うたって えを かんせいさせよう！',W/2,H/2);
+    ctx.clearRect(0,0,W,H); ctx.drawImage(rev,0,0);
     updateProgressText();
   }
   function drawTile(idx){
     const cx=(idx%cols)*TILE, cy=((idx/cols)|0)*TILE;
-    ctx.drawImage(off, cx,cy,TILE,TILE, cx,cy,TILE,TILE);
+    rctx.drawImage(off, cx,cy,TILE,TILE, cx,cy,TILE,TILE);
   }
   function revealTo(count){
     count=Math.min(count,total);
@@ -347,6 +353,7 @@
       return false;
     }
     audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    try{ await audioCtx.resume(); }catch(e){}   // <-- critical: unlock suspended context
     const src=audioCtx.createMediaStreamSource(micStream);
     analyser=audioCtx.createAnalyser(); analyser.fftSize=1024;
     data=new Uint8Array(analyser.fftSize);
@@ -369,6 +376,21 @@
   // ---------- effects (fireworks / confetti / sparkles) ----------
   let particles=[], confetti=[], sparkles=[], doneTime=0, fwTimer=0;
   const CONF_COLORS=['#ff6b8a','#ffd45e','#7ec8ff','#8be08b','#c39bff','#ff9248'];
+  const SPK_COLORS=['#ffffff','#fff2a8','#ffd45e','#ffc0e0','#bfe9ff','#b8ffcf'];
+  function addSparkle(x,y,r){sparkles.push({x,y,r,life:1,col:SPK_COLORS[(Math.random()*SPK_COLORS.length)|0]});}
+
+  // live voice-reactive effects while singing — louder = more kirakira
+  function updateLive(dt, vol){
+    // number of sparkles grows with volume (nothing when silent)
+    const n = Math.round(vol*vol*10);
+    for(let i=0;i<n;i++) addSparkle(rnd(0,W), rnd(0,H), rnd(3,9));
+    // loud peaks shoot a little sparkle-firework
+    if(vol>0.45 && Math.random()<vol*0.45) spawnFirework();
+    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.06;p.vx*=0.99;p.life-=0.02;});
+    particles=particles.filter(p=>p.life>0);
+    sparkles.forEach(s=>s.life-=0.045);
+    sparkles=sparkles.filter(s=>s.life>0);
+  }
   function spawnFirework(){
     const x=rnd(W*0.2,W*0.8), y=rnd(H*0.15,H*0.5);
     const col=CONF_COLORS[(Math.random()*CONF_COLORS.length)|0];
@@ -394,7 +416,7 @@
     confetti.forEach(c=>{c.x+=c.vx+Math.sin((c.y+c.rot)*0.05);c.y+=c.vy;c.rot+=c.vr;});
     confetti=confetti.filter(c=>c.y<H+20);
     // sparkles
-    if(Math.random()<0.5)sparkles.push({x:rnd(0,W),y:rnd(0,H),r:rnd(2,5),life:1});
+    if(Math.random()<0.6)addSparkle(rnd(0,W),rnd(0,H),rnd(3,7));
     sparkles.forEach(s=>s.life-=0.03);
     sparkles=sparkles.filter(s=>s.life>0);
   }
@@ -402,7 +424,7 @@
     particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();});
     ctx.globalAlpha=1;
     confetti.forEach(c=>{ctx.save();ctx.translate(c.x,c.y);ctx.rotate(c.rot);ctx.fillStyle=c.col;ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);ctx.restore();});
-    sparkles.forEach(s=>{ctx.globalAlpha=Math.max(0,s.life);ctx.fillStyle='#fff';drawStar(s.x,s.y,s.r);});
+    sparkles.forEach(s=>{ctx.globalAlpha=Math.max(0,s.life);ctx.fillStyle=s.col||'#fff';drawStar(s.x,s.y,s.r);});
     ctx.globalAlpha=1;
   }
   function drawStar(x,y,r){
@@ -425,23 +447,30 @@
   const resetBtn=document.getElementById('resetBtn');
 
   let lastT=performance.now();
-  const RATE=0.0016; // completion speed factor per unit volume per frame
+  const RATE=0.0024; // completion speed factor per unit volume per frame
   function loop(now){
     const dt=now-lastT; lastT=now;
     if(state==='running'){
+      if(audioCtx && audioCtx.state==='suspended'){ audioCtx.resume(); } // keep it awake
       const raw=readVolume();
-      const vol=Math.min(1, raw*2.6);       // sensitivity
-      smoothVol+=(vol-smoothVol)*0.3;
+      const vol=Math.min(1, raw*4.5);        // higher sensitivity = clearly reactive
+      smoothVol+=(vol-smoothVol)*0.35;
       volFill.style.width=(smoothVol*100).toFixed(0)+'%';
       volTxt.textContent = smoothVol>0.55?'📣':smoothVol>0.25?'🔊':smoothVol>0.08?'🔉':'🔈';
       // advance progress only when actually singing
-      if(vol>0.06){ progress=Math.min(1, progress + vol*RATE*(dt/16.67)); }
+      if(vol>0.04){ progress=Math.min(1, progress + vol*RATE*(dt/16.67)); }
       revealTo(Math.floor(progress*total));
+      // show the revealed picture, then voice-reactive sparkles on top
+      ctx.clearRect(0,0,W,H);
+      ctx.drawImage(rev,0,0);
+      updateLive(dt, smoothVol);
+      drawEffects();
       updateProgressText();
       if(progress>=1){ finish(); }
     } else if(state==='done'){
-      // redraw full picture then effects on top
-      ctx.drawImage(off,0,0);
+      // full picture (already on rev) then celebration effects on top
+      ctx.clearRect(0,0,W,H);
+      ctx.drawImage(rev,0,0);
       updateEffects(dt);
       drawEffects();
     }
