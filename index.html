@@ -56,6 +56,20 @@
   .meter{height:22px;border-radius:999px;background:#ffffffaa;overflow:hidden;box-shadow:inset 0 2px 5px rgba(0,0,0,.12);}
   .meter-fill{height:100%;width:0%;border-radius:999px;
     background:linear-gradient(90deg,#8be08b,#ffd45e 55%,#ff6b8a);transition:width .06s linear;}
+  .sens-wrap{margin-top:12px;}
+  .sens-label{display:flex;justify-content:space-between;font-size:13px;color:#7a6f7a;margin-bottom:6px;}
+  .sens-label b{color:var(--pink-d);}
+  .sens-range{width:100%;height:26px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;margin:0;}
+  .sens-range:focus{outline:none;}
+  .sens-range::-webkit-slider-runnable-track{height:12px;border-radius:999px;
+    background:linear-gradient(90deg,#bfe9ff,#ffd45e 55%,#ff6b8a);box-shadow:inset 0 1px 3px rgba(0,0,0,.18);}
+  .sens-range::-moz-range-track{height:12px;border-radius:999px;
+    background:linear-gradient(90deg,#bfe9ff,#ffd45e 55%,#ff6b8a);box-shadow:inset 0 1px 3px rgba(0,0,0,.18);}
+  .sens-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:28px;height:28px;border-radius:50%;
+    background:#fff;border:4px solid var(--pink);box-shadow:0 3px 8px rgba(255,120,160,.5);margin-top:-8px;}
+  .sens-range::-moz-range-thumb{width:28px;height:28px;border-radius:50%;
+    background:#fff;border:4px solid var(--pink);box-shadow:0 3px 8px rgba(255,120,160,.5);}
+  .sens-ticks{display:flex;justify-content:space-between;font-size:11px;color:#b0a5b0;margin-top:2px;}
   .progress-txt{text-align:center;font-size:22px;font-weight:800;color:var(--pink-d);margin-top:10px;min-height:28px;}
   .hint{text-align:center;font-size:13px;color:#9a8f9a;margin-top:6px;}
   .badge{display:inline-block;background:#fff4;padding:2px 10px;border-radius:999px;}
@@ -76,6 +90,12 @@
     <div class="meter-wrap">
       <div class="meter-label"><span>こえの おおきさ</span><span id="volTxt">🔈</span></div>
       <div class="meter"><div class="meter-fill" id="volFill"></div></div>
+    </div>
+
+    <div class="sens-wrap">
+      <div class="sens-label"><span>はんのうの かんど</span><b id="sensTxt">ふつう</b></div>
+      <input type="range" id="sensRange" class="sens-range" min="2" max="9" step="0.5" value="4.5">
+      <div class="sens-ticks"><span>◀ ひかえめ</span><span>びんかん ▶</span></div>
     </div>
 
     <div class="progress-txt" id="progTxt">えらんで「スタート」をおしてね</div>
@@ -445,6 +465,14 @@
   const startBtn=document.getElementById('startBtn');
   const stopBtn=document.getElementById('stopBtn');
   const resetBtn=document.getElementById('resetBtn');
+  const sensRange=document.getElementById('sensRange');
+  const sensTxt=document.getElementById('sensTxt');
+  function updateSensLabel(){
+    const v=parseFloat(sensRange.value);
+    sensTxt.textContent = v<=2.5?'とても ひかえめ' : v<=3.5?'ひかえめ' : v<=5?'ふつう' : v<=6.5?'つよめ' : v<=7.5?'びんかん' : 'とても びんかん';
+  }
+  sensRange.addEventListener('input', updateSensLabel);
+  updateSensLabel();
 
   let lastT=performance.now();
   const RATE=0.0024; // completion speed factor per unit volume per frame
@@ -453,7 +481,8 @@
     if(state==='running'){
       if(audioCtx && audioCtx.state==='suspended'){ audioCtx.resume(); } // keep it awake
       const raw=readVolume();
-      const vol=Math.min(1, raw*4.5);        // higher sensitivity = clearly reactive
+      const sens=parseFloat(sensRange.value)||4.5;   // sensitivity from the slider
+      const vol=Math.min(1, raw*sens);        // higher sensitivity = clearly reactive
       smoothVol+=(vol-smoothVol)*0.35;
       volFill.style.width=(smoothVol*100).toFixed(0)+'%';
       volTxt.textContent = smoothVol>0.55?'📣':smoothVol>0.25?'🔊':smoothVol>0.08?'🔉':'🔈';
